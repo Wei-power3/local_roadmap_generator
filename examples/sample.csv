@@ -1,0 +1,21 @@
+Row Type,Dimension,Activity,Label,Start Date,End Date,Type,Notes
+dimension,Business Strategy,,,,,,
+activity,Business Strategy,vision and ambition,,2025-01-01,2025-06-30,bar,
+activity,Business Strategy,market prioritization,,2025-02-01,2025-07-31,bar,
+activity,Business Strategy,business model,,2025-03-01,2025-09-30,bar,
+activity,Business Strategy,partnership strategy,,2025-04-01,2025-10-31,bar,
+marker,Business Strategy,,,2025-01-15,,decision,Approve HF telemonitoring strategy and allocate resources
+dimension,Product/Solution,,,,,,
+activity,Product/Solution,customer problem discovery,,2025-01-01,2025-03-31,bar,
+activity,Product/Solution,solution concept and design,,2025-02-01,2025-05-31,bar,
+activity,Product/Solution,offering definition,,2025-04-01,2025-06-30,bar,
+activity,Product/Solution,product roadmap,,2025-05-01,2025-09-30,bar,
+activity,Product/Solution,validation,,2025-06-01,2025-10-31,bar,
+marker,Product/Solution,,,2025-04-01,,milestone,Offering definition locked
+dimension,Development via Partners,,,,,,
+activity,Development via Partners,solution development or adjustment,,2025-04-01,2025-12-31,bar,
+marker,Development via Partners,,,2025-04-01,,decision,Approve US partnership
+marker,Development via Partners,,,2025-04-01,,milestone,US platform development starts
+dimension,Go-to-Market,,,,,,
+activity,Go-to-Market,Sales,,2025-09-01,2025-12-31,bar,
+activity,Go-to-Market,Marketing,,2025-08-01,2025-12-31,bar,
