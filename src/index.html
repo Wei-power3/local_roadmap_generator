@@ -1,12 +1,959 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>swimlane-gantt</title>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Swimlane Gantt Tool</title>
+  <style>
+    :root {
+      --blue: #00234C;
+      --white: #FFFFFF;
+      --tangerine: #F04E23;
+      --tangerine-dark: #BE3C1C;
+      --blue-gray: #587992;
+      --gray: #8E9295;
+      --green: #00AC6C;
+      --alert-red: #EE0000;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      padding: 20px;
+      font-family: system-ui, sans-serif;
+      font-size: 14px;
+      color: var(--blue);
+      background: #fff;
+    }
+
+    #app { max-width: 100%; }
+
+    #errorBox {
+      display: none;
+      margin-bottom: 16px;
+      border: 1px solid var(--alert-red);
+      background: rgba(238, 0, 0, 0.1);
+      border-radius: 4px;
+      padding: 12px;
+      color: var(--alert-red);
+      font-size: 13px;
+      white-space: pre-wrap;
+    }
+
+    #warningBox {
+      display: none;
+      margin-bottom: 16px;
+      border: 1px solid var(--tangerine);
+      background: rgba(240, 78, 35, 0.12);
+      border-radius: 4px;
+      padding: 12px;
+      color: var(--blue);
+      font-size: 13px;
+    }
+
+    #uploadArea {
+      height: 80px;
+      border: 2px dashed var(--gray);
+      border-radius: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+      color: var(--gray);
+      cursor: pointer;
+      margin-bottom: 16px;
+      user-select: none;
+    }
+
+    #uploadArea.hover { border-color: var(--blue); }
+    #uploadArea.drop-ok { border-color: var(--green); color: var(--green); }
+
+    #controlsRow {
+      display: flex;
+      align-items: center;
+      margin-bottom: 16px;
+      gap: 12px;
+    }
+
+    #scaleToggle {
+      display: inline-flex;
+      border-collapse: collapse;
+    }
+
+    .scale-btn {
+      height: 32px;
+      padding: 0 16px;
+      border: 1px solid var(--blue);
+      background: #fff;
+      color: var(--blue);
+      font-family: system-ui, sans-serif;
+      font-size: 14px;
+      cursor: pointer;
+      margin: 0;
+    }
+
+    .scale-btn + .scale-btn { border-left: 0; }
+    .scale-btn:first-child { border-radius: 4px 0 0 4px; }
+    .scale-btn:last-child { border-radius: 0 4px 4px 0; }
+    .scale-btn.active {
+      background: var(--blue);
+      color: var(--white);
+    }
+
+    .spacer { flex: 1; }
+
+    #exportBtn {
+      height: 36px;
+      padding: 0 24px;
+      border: 0;
+      border-radius: 4px;
+      background: var(--tangerine);
+      color: #fff;
+      font-weight: 700;
+      font-size: 13px;
+      cursor: pointer;
+    }
+    #exportBtn:hover { background: var(--tangerine-dark); }
+
+    #visibilityToggles {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 16px 24px;
+      margin-bottom: 24px;
+    }
+
+    .toggle-item {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 13px;
+      color: var(--blue);
+      cursor: pointer;
+    }
+
+    .toggle-item input {
+      appearance: none;
+      width: 16px;
+      height: 16px;
+      border: 1.5px solid var(--blue);
+      border-radius: 3px;
+      display: inline-grid;
+      place-content: center;
+      margin: 0;
+      cursor: pointer;
+    }
+
+    .toggle-item input:checked {
+      background: var(--blue);
+    }
+
+    .toggle-item input:checked::after {
+      content: "✓";
+      color: #fff;
+      font-size: 11px;
+      line-height: 1;
+      transform: translateY(-0.5px);
+    }
+
+    #canvasWrap { width: 100%; }
+
+    #chartCanvas {
+      width: 100%;
+      height: auto;
+      display: block;
+      background: #fff;
+      border: 1px solid rgba(88, 121, 146, 0.25);
+    }
+
+    #fileInput { display: none; }
+  </style>
 </head>
 <body>
-  <!-- placeholder: swimlane Gantt chart tool -->
-  <!-- see docs/engineering-spec.md and docs/visual-design-spec.md for build instructions -->
+  <div id="app">
+    <div id="errorBox"></div>
+    <div id="warningBox"></div>
+
+    <div id="uploadArea" tabindex="0" role="button" aria-label="Upload CSV">
+      Upload CSV or drop file here
+    </div>
+    <input id="fileInput" type="file" accept=".csv,text/csv" />
+
+    <div id="controlsRow">
+      <div id="scaleToggle">
+        <button class="scale-btn active" data-scale="month">Month</button>
+        <button class="scale-btn" data-scale="quarter">Quarter</button>
+        <button class="scale-btn" data-scale="year">Year</button>
+      </div>
+      <div class="spacer"></div>
+      <button id="exportBtn">Export PNG</button>
+    </div>
+
+    <div id="visibilityToggles"></div>
+
+    <div id="canvasWrap">
+      <canvas id="chartCanvas"></canvas>
+    </div>
+  </div>
+
+  <script>
+    (function () {
+      const COLORS = {
+        blue: '#00234C',
+        white: '#FFFFFF',
+        tangerine: '#F04E23',
+        blueGray: '#587992',
+        gray: '#8E9295',
+        alertRed: '#EE0000'
+      };
+
+      const DEFAULT_DIMENSION_COLORS = ['#2183CA', '#00AC6C', '#00AFAC', '#860C87', '#F04E23', '#587992'];
+
+      const LAYOUT = {
+        width: 1920,
+        leftColWidth: 200,
+        topMargin: 40,
+        bottomMargin: 40,
+        timelineHeaderHeight: 36,
+        dimHeaderRowHeight: 32,
+        activityRowHeight: 28,
+        markerRowHeight: 36,
+        rowVerticalPadding: 4
+      };
+
+      const FONT = {
+        dimHeader: 'bold 13px Verdana',
+        activity: '11px Verdana',
+        axis: '10px Verdana',
+        milestone: '10px Verdana',
+        decision: '10px Verdana',
+        title: 'bold 15px Verdana'
+      };
+
+      const state = {
+        project: null,
+        scale: 'month',
+        visibleDimensions: new Set(),
+        errors: [],
+        warning: ''
+      };
+
+      const el = {
+        errorBox: document.getElementById('errorBox'),
+        warningBox: document.getElementById('warningBox'),
+        uploadArea: document.getElementById('uploadArea'),
+        fileInput: document.getElementById('fileInput'),
+        scaleButtons: Array.from(document.querySelectorAll('.scale-btn')),
+        exportBtn: document.getElementById('exportBtn'),
+        visibilityToggles: document.getElementById('visibilityToggles'),
+        canvas: document.getElementById('chartCanvas')
+      };
+
+      const ctx = el.canvas.getContext('2d');
+
+      function splitCsvRows(text) {
+        const rows = [];
+        let cur = '';
+        let inQuotes = false;
+        for (let i = 0; i < text.length; i++) {
+          const ch = text[i];
+          if (ch === '"') {
+            if (inQuotes && text[i + 1] === '"') {
+              cur += '"';
+              i += 1;
+            } else {
+              inQuotes = !inQuotes;
+            }
+          } else if ((ch === '\n' || ch === '\r') && !inQuotes) {
+            if (ch === '\r' && text[i + 1] === '\n') i += 1;
+            rows.push(cur);
+            cur = '';
+          } else {
+            cur += ch;
+          }
+        }
+        if (cur.length > 0) rows.push(cur);
+        return rows.filter((r) => r.trim().length > 0);
+      }
+
+      function splitCsvFields(row) {
+        const out = [];
+        let cur = '';
+        let inQuotes = false;
+        for (let i = 0; i < row.length; i++) {
+          const ch = row[i];
+          if (ch === '"') {
+            if (inQuotes && row[i + 1] === '"') {
+              cur += '"';
+              i += 1;
+            } else {
+              inQuotes = !inQuotes;
+            }
+          } else if (ch === ',' && !inQuotes) {
+            out.push(cur.trim());
+            cur = '';
+          } else {
+            cur += ch;
+          }
+        }
+        out.push(cur.trim());
+        return out;
+      }
+
+      function isValidHex(color) {
+        return /^#[0-9a-fA-F]{6}$/.test(color || '');
+      }
+
+      function parseDateStrict(str) {
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(str || '')) return null;
+        const [y, m, da] = str.split('-').map(Number);
+        const d = new Date(Date.UTC(y, m - 1, da));
+        if (Number.isNaN(d.getTime())) return null;
+        if (d.getUTCFullYear() !== y || d.getUTCMonth() + 1 !== m || d.getUTCDate() !== da) return null;
+        return d;
+      }
+
+      function parseCsv(text) {
+        const errors = [];
+        const rows = splitCsvRows(text);
+        if (rows.length === 0) return { errors: ['No data found — check that your CSV has at least one activity row'] };
+
+        const header = splitCsvFields(rows[0]);
+        const hIdx = (name) => header.findIndex((h) => h.trim().toLowerCase() === name.toLowerCase());
+
+        const requiredCols = ['Row Type', 'Dimension', 'Activity', 'Label', 'Start Date', 'End Date', 'Type', 'Notes'];
+        requiredCols.forEach((col) => {
+          if (hIdx(col) === -1) errors.push(`Header: missing required column '${col}'`);
+        });
+        if (errors.length) return { errors };
+
+        const idx = {
+          rowType: hIdx('Row Type'),
+          dimension: hIdx('Dimension'),
+          activity: hIdx('Activity'),
+          label: hIdx('Label'),
+          startDate: hIdx('Start Date'),
+          endDate: hIdx('End Date'),
+          type: hIdx('Type'),
+          notes: hIdx('Notes'),
+          color: hIdx('Color')
+        };
+
+        const dimensions = [];
+        const activities = [];
+        const markers = [];
+        const dimensionByName = new Map();
+
+        let activityCount = 0;
+        let minDate = null;
+        let maxDate = null;
+
+        for (let r = 1; r < rows.length; r++) {
+          const csvRowNum = r + 1;
+          const fields = splitCsvFields(rows[r]);
+          const val = (i) => (i >= 0 ? (fields[i] || '').trim() : '');
+
+          const rowType = val(idx.rowType).toLowerCase();
+          const dimensionName = val(idx.dimension);
+          const activityName = val(idx.activity);
+          const label = val(idx.label);
+          const startDateStr = val(idx.startDate);
+          const endDateStr = val(idx.endDate);
+          const type = val(idx.type).toLowerCase();
+          const notes = val(idx.notes).replace(/\\n/g, '\n');
+          const colorOverride = val(idx.color);
+
+          if (!['dimension', 'activity', 'marker'].includes(rowType)) {
+            errors.push(`Row ${csvRowNum}: Row Type must be one of dimension, activity, marker`);
+            continue;
+          }
+
+          if (rowType === 'dimension') {
+            if (!dimensionName) {
+              errors.push(`Row ${csvRowNum}: dimension row requires Dimension`);
+              continue;
+            }
+            if (dimensionByName.has(dimensionName)) {
+              errors.push(`Row ${csvRowNum}: duplicate dimension '${dimensionName}'`);
+              continue;
+            }
+            let color = colorOverride;
+            if (color && !isValidHex(color)) {
+              errors.push(`Row ${csvRowNum}: invalid Color hex '${color}' — expected #RRGGBB`);
+              color = '';
+            }
+            const dim = {
+              id: `dim_${dimensions.length + 1}`,
+              name: dimensionName,
+              order: dimensions.length,
+              visible: true,
+              color: color || null
+            };
+            dimensions.push(dim);
+            dimensionByName.set(dimensionName, dim);
+            continue;
+          }
+
+          if (!dimensionName) {
+            errors.push(`Row ${csvRowNum}: ${rowType} row requires Dimension`);
+            continue;
+          }
+          const dim = dimensionByName.get(dimensionName);
+          if (!dim) {
+            errors.push(`Row ${csvRowNum}: dimension '${dimensionName}' not found — must be defined earlier`);
+            continue;
+          }
+
+          if (!startDateStr) {
+            errors.push(`Row ${csvRowNum}: ${rowType} requires a Start Date`);
+            continue;
+          }
+          const startDate = parseDateStrict(startDateStr);
+          if (!startDate) {
+            errors.push(`Row ${csvRowNum}: invalid date format — expected YYYY-MM-DD`);
+            continue;
+          }
+
+          if (rowType === 'activity') {
+            if (!activityName) errors.push(`Row ${csvRowNum}: activity row requires Activity`);
+            if (type !== 'bar') errors.push(`Row ${csvRowNum}: activity Type must be 'bar'`);
+
+            if (!endDateStr) {
+              errors.push(`Row ${csvRowNum}: activity requires End Date`);
+              continue;
+            }
+            const endDate = parseDateStrict(endDateStr);
+            if (!endDate) {
+              errors.push(`Row ${csvRowNum}: invalid End Date format — expected YYYY-MM-DD`);
+              continue;
+            }
+            if (endDate < startDate) {
+              errors.push(`Row ${csvRowNum}: End Date must be on or after Start Date`);
+              continue;
+            }
+
+            activities.push({
+              id: `act_${activities.length + 1}`,
+              dimensionId: dim.id,
+              label: activityName,
+              startDate,
+              endDate,
+              type: 'bar'
+            });
+            activityCount += 1;
+            minDate = minDate ? new Date(Math.min(minDate, startDate)) : new Date(startDate);
+            maxDate = maxDate ? new Date(Math.max(maxDate, endDate)) : new Date(endDate);
+          }
+
+          if (rowType === 'marker') {
+            if (!['milestone', 'decision'].includes(type)) {
+              errors.push(`Row ${csvRowNum}: marker Type must be milestone or decision`);
+              continue;
+            }
+            markers.push({
+              id: `mark_${markers.length + 1}`,
+              dimensionId: dim.id,
+              label: label || notes || type,
+              date: startDate,
+              type,
+              notes
+            });
+            minDate = minDate ? new Date(Math.min(minDate, startDate)) : new Date(startDate);
+            maxDate = maxDate ? new Date(Math.max(maxDate, startDate)) : new Date(startDate);
+          }
+        }
+
+        if (activityCount < 1) errors.push('No data found — check that your CSV has at least one activity row');
+        if (!minDate || !maxDate) errors.push('No valid dates found to render timeline');
+
+        dimensions.forEach((dim, i) => {
+          if (!dim.color) dim.color = DEFAULT_DIMENSION_COLORS[Math.min(i, DEFAULT_DIMENSION_COLORS.length - 1)];
+        });
+
+        if (errors.length) return { errors };
+
+        return {
+          errors: [],
+          project: {
+            name: 'Swimlane Gantt',
+            startDate: minDate,
+            endDate: maxDate,
+            timelineScale: 'month'
+          },
+          dimensions,
+          activities,
+          markers
+        };
+      }
+
+      function startOfMonth(d) { return new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), 1)); }
+      function startOfQuarter(d) {
+        const qMonth = Math.floor(d.getUTCMonth() / 3) * 3;
+        return new Date(Date.UTC(d.getUTCFullYear(), qMonth, 1));
+      }
+      function startOfYear(d) { return new Date(Date.UTC(d.getUTCFullYear(), 0, 1)); }
+
+      function addMonths(d, n) { return new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + n, 1)); }
+      function addYears(d, n) { return new Date(Date.UTC(d.getUTCFullYear() + n, 0, 1)); }
+
+      function getTicks(start, end, scale) {
+        const ticks = [];
+        let cur;
+        if (scale === 'month') cur = startOfMonth(start);
+        else if (scale === 'quarter') cur = startOfQuarter(start);
+        else cur = startOfYear(start);
+
+        while (cur <= end) {
+          ticks.push(new Date(cur));
+          if (scale === 'month') cur = addMonths(cur, 1);
+          else if (scale === 'quarter') cur = addMonths(cur, 3);
+          else cur = addYears(cur, 1);
+        }
+        return ticks;
+      }
+
+      function formatTick(d, scale) {
+        const year = d.getUTCFullYear();
+        if (scale === 'month') {
+          const names = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+          return `${names[d.getUTCMonth()]} ${year}`;
+        }
+        if (scale === 'quarter') {
+          return `Q${Math.floor(d.getUTCMonth() / 3) + 1} ${year}`;
+        }
+        return String(year);
+      }
+
+      function roundedRect(context, x, y, w, h, r) {
+        const rr = Math.min(r, w / 2, h / 2);
+        context.beginPath();
+        context.moveTo(x + rr, y);
+        context.arcTo(x + w, y, x + w, y + h, rr);
+        context.arcTo(x + w, y + h, x, y + h, rr);
+        context.arcTo(x, y + h, x, y, rr);
+        context.arcTo(x, y, x + w, y, rr);
+        context.closePath();
+      }
+
+      function drawMultiline(context, lines, x, y, lineHeight, maxLines, maxWidth) {
+        const out = [];
+        lines.forEach((line) => {
+          const words = String(line || '').split(/\s+/).filter(Boolean);
+          let cur = '';
+          for (const w of words) {
+            const t = cur ? `${cur} ${w}` : w;
+            if (context.measureText(t).width <= maxWidth) cur = t;
+            else {
+              if (cur) out.push(cur);
+              cur = w;
+            }
+          }
+          if (cur) out.push(cur);
+          if (words.length === 0) out.push('');
+        });
+
+        let truncated = out.slice(0, maxLines);
+        if (out.length > maxLines && truncated.length > 0) {
+          let last = truncated[maxLines - 1];
+          while (context.measureText(last + '…').width > maxWidth && last.length > 1) last = last.slice(0, -1);
+          truncated[maxLines - 1] = last + '…';
+        }
+
+        truncated.forEach((line, i) => context.fillText(line, x, y + i * lineHeight));
+        return truncated.length;
+      }
+
+      function computeChartModel(width, heightHint) {
+        const project = state.project;
+        const visibleDims = project.dimensions.filter((d) => state.visibleDimensions.has(d.id));
+        const bodyHeight = visibleDims.reduce((sum, dim) => {
+          const activityCount = project.activities.filter((a) => a.dimensionId === dim.id).length;
+          return sum + LAYOUT.dimHeaderRowHeight + activityCount * LAYOUT.activityRowHeight + LAYOUT.markerRowHeight + 1;
+        }, 0);
+
+        const minHeight = 1080;
+        const computedHeight = LAYOUT.topMargin + LAYOUT.timelineHeaderHeight + bodyHeight + LAYOUT.bottomMargin;
+        const height = Math.max(heightHint || minHeight, computedHeight, minHeight);
+
+        const timelineX = LAYOUT.leftColWidth;
+        const timelineWidth = width - LAYOUT.leftColWidth;
+        const timelineStartY = LAYOUT.topMargin;
+        const contentStartY = timelineStartY + LAYOUT.timelineHeaderHeight;
+
+        const msMin = project.startDate.getTime();
+        const msMax = project.endDate.getTime();
+        const msSpan = Math.max(1, msMax - msMin);
+        const xForDate = (d) => timelineX + ((d.getTime() - msMin) / msSpan) * timelineWidth;
+
+        return { visibleDims, height, timelineX, timelineWidth, timelineStartY, contentStartY, xForDate };
+      }
+
+      function drawChart(renderCtx, width, heightHint) {
+        if (!state.project) {
+          renderCtx.clearRect(0, 0, width, heightHint || 1080);
+          return { width, height: heightHint || 1080 };
+        }
+
+        const model = computeChartModel(width, heightHint);
+        const { visibleDims, height, timelineX, timelineWidth, timelineStartY, contentStartY, xForDate } = model;
+
+        renderCtx.canvas.width = width;
+        renderCtx.canvas.height = height;
+        renderCtx.clearRect(0, 0, width, height);
+
+        renderCtx.fillStyle = COLORS.white;
+        renderCtx.fillRect(0, 0, width, height);
+
+        renderCtx.fillStyle = COLORS.white;
+        renderCtx.fillRect(0, timelineStartY, width, LAYOUT.timelineHeaderHeight);
+        renderCtx.strokeStyle = COLORS.blue;
+        renderCtx.lineWidth = 1.5;
+        renderCtx.beginPath();
+        renderCtx.moveTo(0, timelineStartY + LAYOUT.timelineHeaderHeight);
+        renderCtx.lineTo(width, timelineStartY + LAYOUT.timelineHeaderHeight);
+        renderCtx.stroke();
+
+        const ticks = getTicks(state.project.startDate, state.project.endDate, state.scale);
+        renderCtx.font = FONT.axis;
+        renderCtx.fillStyle = COLORS.blue;
+        renderCtx.textBaseline = 'middle';
+
+        for (const tick of ticks) {
+          const x = xForDate(tick);
+          renderCtx.strokeStyle = 'rgba(88,121,146,0.3)';
+          renderCtx.lineWidth = 0.5;
+          renderCtx.beginPath();
+          renderCtx.moveTo(x + 0.5, timelineStartY);
+          renderCtx.lineTo(x + 0.5, height - LAYOUT.bottomMargin);
+          renderCtx.stroke();
+          renderCtx.fillText(formatTick(tick, state.scale), x + 4, timelineStartY + LAYOUT.timelineHeaderHeight / 2);
+        }
+
+        const now = new Date();
+        const today = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
+        if (today >= state.project.startDate && today <= state.project.endDate) {
+          const xToday = xForDate(today);
+          renderCtx.strokeStyle = 'rgba(240,78,35,0.6)';
+          renderCtx.lineWidth = 1;
+          renderCtx.setLineDash([6, 4]);
+          renderCtx.beginPath();
+          renderCtx.moveTo(xToday, timelineStartY);
+          renderCtx.lineTo(xToday, height - LAYOUT.bottomMargin);
+          renderCtx.stroke();
+          renderCtx.setLineDash([]);
+        }
+
+        let y = contentStartY;
+
+        visibleDims.forEach((dim) => {
+          const dimActivities = state.project.activities.filter((a) => a.dimensionId === dim.id);
+          const dimMarkers = state.project.markers.filter((m) => m.dimensionId === dim.id);
+          const sectionHeight = LAYOUT.dimHeaderRowHeight + dimActivities.length * LAYOUT.activityRowHeight + LAYOUT.markerRowHeight;
+
+          renderCtx.fillStyle = COLORS.blue;
+          renderCtx.fillRect(0, y, LAYOUT.leftColWidth, sectionHeight);
+          renderCtx.fillStyle = COLORS.white;
+          renderCtx.font = FONT.dimHeader;
+          renderCtx.textBaseline = 'middle';
+          renderCtx.fillText(dim.name, 12, y + LAYOUT.dimHeaderRowHeight / 2);
+
+          const headerBottom = y + LAYOUT.dimHeaderRowHeight;
+          renderCtx.strokeStyle = 'rgba(88,121,146,0.4)';
+          renderCtx.lineWidth = 1;
+          renderCtx.beginPath();
+          renderCtx.moveTo(0, headerBottom);
+          renderCtx.lineTo(width, headerBottom);
+          renderCtx.stroke();
+
+          dimActivities.forEach((a, idx) => {
+            const rowY = y + LAYOUT.dimHeaderRowHeight + idx * LAYOUT.activityRowHeight;
+            const barY = rowY + (LAYOUT.activityRowHeight - 18) / 2;
+            const x0 = xForDate(a.startDate);
+            const x1 = xForDate(a.endDate);
+            const barW = Math.max(4, x1 - x0);
+
+            roundedRect(renderCtx, x0, barY, barW, 18, 3);
+            renderCtx.fillStyle = dim.color + 'CC';
+            renderCtx.fill();
+            renderCtx.strokeStyle = dim.color;
+            renderCtx.lineWidth = 1;
+            renderCtx.stroke();
+
+            renderCtx.font = FONT.activity;
+            renderCtx.fillStyle = COLORS.blue;
+            renderCtx.textBaseline = 'middle';
+            const labelX = barW > 60 ? x0 + 6 : x0 + barW + 6;
+            renderCtx.fillText(a.label, labelX, rowY + LAYOUT.activityRowHeight / 2);
+
+            renderCtx.strokeStyle = 'rgba(142,146,149,0.3)';
+            renderCtx.lineWidth = 0.5;
+            renderCtx.beginPath();
+            renderCtx.moveTo(0, rowY + LAYOUT.activityRowHeight);
+            renderCtx.lineTo(width, rowY + LAYOUT.activityRowHeight);
+            renderCtx.stroke();
+          });
+
+          const markerRowY = y + LAYOUT.dimHeaderRowHeight + dimActivities.length * LAYOUT.activityRowHeight;
+          const placedXs = [];
+
+          dimMarkers.forEach((m) => {
+            const x = xForDate(m.date);
+            let yOffset = 0;
+            if (placedXs.some((px) => Math.abs(px - x) < 24)) yOffset = 8;
+            placedXs.push(x);
+
+            if (m.type === 'milestone') {
+              const cy = markerRowY + LAYOUT.markerRowHeight / 2 + yOffset;
+              renderCtx.beginPath();
+              renderCtx.arc(x, cy, 7, 0, Math.PI * 2);
+              renderCtx.fillStyle = COLORS.white;
+              renderCtx.fill();
+              renderCtx.strokeStyle = COLORS.blue;
+              renderCtx.lineWidth = 1.5;
+              renderCtx.stroke();
+
+              renderCtx.font = FONT.milestone;
+              renderCtx.fillStyle = COLORS.blue;
+              renderCtx.textAlign = 'center';
+              renderCtx.textBaseline = 'top';
+              const lines = String(m.label || '').split('\n');
+              drawMultiline(renderCtx, lines, x, cy + 10, 12, 2, 140);
+              renderCtx.textAlign = 'left';
+            } else if (m.type === 'decision') {
+              const pad = 6;
+              renderCtx.font = FONT.decision;
+              const rawLines = (m.notes || m.label || 'Decision').split('\n');
+              const maxW = 220 - pad * 2;
+              const lineHeight = 12;
+
+              let measuredLines = [];
+              rawLines.forEach((line) => {
+                const words = String(line).split(/\s+/).filter(Boolean);
+                let curr = '';
+                words.forEach((word) => {
+                  const t = curr ? curr + ' ' + word : word;
+                  if (renderCtx.measureText(t).width <= maxW) curr = t;
+                  else {
+                    if (curr) measuredLines.push(curr);
+                    curr = word;
+                  }
+                });
+                if (curr) measuredLines.push(curr);
+                if (words.length === 0) measuredLines.push('');
+              });
+              if (measuredLines.length === 0) measuredLines = ['Decision'];
+
+              const contentW = Math.max(...measuredLines.map((l) => renderCtx.measureText(l).width), 40);
+              const boxW = Math.min(220, contentW + pad * 2);
+              const boxH = Math.max(36, measuredLines.length * lineHeight + pad * 2);
+              const boxY = markerRowY + yOffset;
+
+              roundedRect(renderCtx, x, boxY, boxW, boxH, 4);
+              renderCtx.fillStyle = 'rgba(240,78,35,0.15)';
+              renderCtx.fill();
+              renderCtx.strokeStyle = COLORS.tangerine;
+              renderCtx.lineWidth = 1;
+              renderCtx.stroke();
+
+              renderCtx.fillStyle = COLORS.blue;
+              renderCtx.textBaseline = 'top';
+              renderCtx.textAlign = 'left';
+              drawMultiline(renderCtx, measuredLines, x + pad, boxY + pad, lineHeight, 6, maxW);
+            }
+          });
+
+          y += sectionHeight;
+          renderCtx.strokeStyle = 'rgba(88,121,146,0.4)';
+          renderCtx.lineWidth = 1;
+          renderCtx.beginPath();
+          renderCtx.moveTo(0, y + 0.5);
+          renderCtx.lineTo(width, y + 0.5);
+          renderCtx.stroke();
+        });
+
+        return { width, height };
+      }
+
+      function render() {
+        if (!state.project) {
+          el.canvas.width = 1920;
+          el.canvas.height = 1080;
+          ctx.clearRect(0, 0, el.canvas.width, el.canvas.height);
+          return;
+        }
+        const result = drawChart(ctx, LAYOUT.width);
+        el.canvas.width = result.width;
+        el.canvas.height = result.height;
+        drawChart(ctx, result.width, result.height);
+      }
+
+      function showErrors(errors) {
+        if (!errors || !errors.length) {
+          el.errorBox.style.display = 'none';
+          el.errorBox.textContent = '';
+          return;
+        }
+        el.errorBox.style.display = 'block';
+        el.errorBox.textContent = errors.join('\n');
+      }
+
+      function showWarning(message) {
+        if (!message) {
+          el.warningBox.style.display = 'none';
+          el.warningBox.textContent = '';
+          return;
+        }
+        el.warningBox.style.display = 'block';
+        el.warningBox.textContent = message;
+      }
+
+      function refreshScaleButtons() {
+        el.scaleButtons.forEach((btn) => {
+          btn.classList.toggle('active', btn.dataset.scale === state.scale);
+        });
+      }
+
+      function refreshVisibilityToggles() {
+        el.visibilityToggles.innerHTML = '';
+        if (!state.project) return;
+        state.project.dimensions.forEach((dim) => {
+          const label = document.createElement('label');
+          label.className = 'toggle-item';
+
+          const input = document.createElement('input');
+          input.type = 'checkbox';
+          input.checked = state.visibleDimensions.has(dim.id);
+          input.addEventListener('change', () => {
+            if (input.checked) state.visibleDimensions.add(dim.id);
+            else state.visibleDimensions.delete(dim.id);
+            render();
+          });
+
+          const span = document.createElement('span');
+          span.textContent = dim.name;
+
+          label.appendChild(input);
+          label.appendChild(span);
+          el.visibilityToggles.appendChild(label);
+        });
+      }
+
+      function refreshWarning() {
+        if (!state.project) return showWarning('');
+        const days = (state.project.endDate - state.project.startDate) / (1000 * 60 * 60 * 24);
+        if (state.scale === 'month' && days > 365 * 3) {
+          showWarning('Timeline spans over 3 years. Month scale may be compressed — consider Quarter or Year.');
+        } else {
+          showWarning('');
+        }
+      }
+
+      function loadCsvText(text, sourceName) {
+        const parsed = parseCsv(text);
+        state.errors = parsed.errors;
+        if (parsed.errors.length) {
+          state.project = null;
+          showErrors(parsed.errors);
+          refreshVisibilityToggles();
+          render();
+          return;
+        }
+
+        state.project = {
+          ...parsed.project,
+          dimensions: parsed.dimensions,
+          activities: parsed.activities,
+          markers: parsed.markers
+        };
+        state.visibleDimensions = new Set(parsed.dimensions.map((d) => d.id));
+        showErrors([]);
+        refreshVisibilityToggles();
+        refreshWarning();
+        render();
+
+        if (sourceName) {
+          el.uploadArea.textContent = sourceName;
+          el.uploadArea.classList.add('drop-ok');
+          setTimeout(() => el.uploadArea.classList.remove('drop-ok'), 1000);
+        }
+      }
+
+      function handleFile(file) {
+        if (!file) return;
+        if (!file.name.toLowerCase().endsWith('.csv')) {
+          showErrors(['File must be a .csv']);
+          return;
+        }
+        const reader = new FileReader();
+        reader.onload = () => loadCsvText(String(reader.result || ''), file.name);
+        reader.onerror = () => showErrors(['Failed to read file']);
+        reader.readAsText(file);
+      }
+
+      function exportPng() {
+        if (!state.project) return;
+        const offscreen = document.createElement('canvas');
+        const offCtx = offscreen.getContext('2d');
+        const exportWidth = 3840;
+        const exportHeight = 2160;
+
+        offCtx.scale(2, 2);
+        drawChart(offCtx, 1920, 1080);
+
+        offscreen.width = exportWidth;
+        offscreen.height = exportHeight;
+        offCtx.setTransform(2, 0, 0, 2, 0, 0);
+        drawChart(offCtx, 1920, 1080);
+
+        offscreen.toBlob((blob) => {
+          if (!blob) return;
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.href = url;
+          a.download = 'gantt-export.png';
+          document.body.appendChild(a);
+          a.click();
+          a.remove();
+          URL.revokeObjectURL(url);
+          render();
+        }, 'image/png');
+      }
+
+      el.uploadArea.addEventListener('click', () => el.fileInput.click());
+      el.uploadArea.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          el.fileInput.click();
+        }
+      });
+      el.fileInput.addEventListener('change', (e) => handleFile(e.target.files && e.target.files[0]));
+
+      el.uploadArea.addEventListener('dragover', (e) => {
+        e.preventDefault();
+        el.uploadArea.classList.add('hover');
+      });
+      el.uploadArea.addEventListener('dragleave', () => el.uploadArea.classList.remove('hover'));
+      el.uploadArea.addEventListener('drop', (e) => {
+        e.preventDefault();
+        el.uploadArea.classList.remove('hover');
+        const file = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0];
+        handleFile(file);
+      });
+
+      el.scaleButtons.forEach((btn) => {
+        btn.addEventListener('click', () => {
+          state.scale = btn.dataset.scale;
+          refreshScaleButtons();
+          refreshWarning();
+          render();
+        });
+      });
+
+      el.exportBtn.addEventListener('click', exportPng);
+
+      refreshScaleButtons();
+      render();
+    })();
+  </script>
 </body>
 </html>
