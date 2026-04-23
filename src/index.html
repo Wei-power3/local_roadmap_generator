@@ -306,9 +306,9 @@
 
       function parseDateStrict(str) {
         if (!/^\d{4}-\d{2}-\d{2}$/.test(str || '')) return null;
-        const d = new Date(str + 'T00:00:00');
-        if (Number.isNaN(d.getTime())) return null;
         const [y, m, da] = str.split('-').map(Number);
+        const d = new Date(Date.UTC(y, m - 1, da));
+        if (Number.isNaN(d.getTime())) return null;
         if (d.getUTCFullYear() !== y || d.getUTCMonth() + 1 !== m || d.getUTCDate() !== da) return null;
         return d;
       }
@@ -896,9 +896,6 @@
         const offCtx = offscreen.getContext('2d');
         const exportWidth = 3840;
         const exportHeight = 2160;
-
-        offCtx.scale(2, 2);
-        drawChart(offCtx, 1920, 1080);
 
         offscreen.width = exportWidth;
         offscreen.height = exportHeight;
