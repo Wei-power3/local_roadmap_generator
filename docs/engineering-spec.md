@@ -20,7 +20,7 @@ Dimension
   name: string
   order: integer
   visible: boolean
-  color: string (hex — either from CSV override or assigned from default palette)
+  color: string (hex — from CSV override, UI swatch picker, or default palette)
 
 Activity
   id: string
@@ -41,6 +41,9 @@ Marker
 Config (runtime state)
   scale: "month" | "quarter" | "year"
   visibleDimensions: Set<string> (dimension ids)
+  showActivities: boolean (default true)
+  showMilestones: boolean (default true)
+  showDecisions: boolean (default true)
 ```
 
 ---
@@ -48,11 +51,13 @@ Config (runtime state)
 ## data flow
 
 ```
-User opens index.html in Chrome
+User opens index.html in browser
         ↓
 Upload CSV (button click or file drop)
         ↓
 Browser reads file via FileReader API (no server involved)
+        ↓
+Strip UTF-8 BOM if present; auto-detect delimiter (comma / semicolon / tab)
         ↓
 Validation: check row types, dates, required fields
         ↓
@@ -65,7 +70,7 @@ Validation: check row types, dates, required fields
         ↓ (clean parse)
 Chart renders on HTML Canvas
         ↓
-User adjusts config (scale toggle, visibility toggles)
+User adjusts config (scale toggle, visibility toggles, dimension color swatches)
         ↓
 Canvas re-renders on each config change
         ↓
@@ -93,7 +98,7 @@ State transitions are driven by user actions only. There is no async processing,
 
 | scenario | impact | handling |
 |---|---|---|
-| CSV row has an invalid date format | Chart renders incorrectly or crashes | Validate all dates before rendering; show "Row N: invalid date — expected YYYY-MM-DD" |
+| CSV row has an invalid date format | Cannot place on timeline | Validate all dates before rendering; show "Row N: invalid date — expected YYYY-MM-DD" |
 | Activity end date is before start date | Bar renders at zero width or backwards | Detect and surface as a validation error before rendering |
 | Marker has no date | Cannot place on timeline | Flag as validation error: "Row N: marker requires a Start Date" |
 | Dimension name in an activity row does not match any defined dimension | Activity silently disappears | Error: "Row N: dimension 'X' not found — must be defined earlier" |
@@ -101,7 +106,11 @@ State transitions are driven by user actions only. There is no async processing,
 | PNG export on a high-DPI (Retina) display | Export looks blurry when printed | Render offscreen canvas at 3840×2160 (2× scale) via `setTransform(2,0,0,2,0,0)` |
 | CSV is empty or has only a header row | Nothing to render | Show: "No data found — check that your CSV has at least one activity row" |
 | User uploads a non-CSV file | Parser fails | Show: "File must be a .csv" — do not attempt to parse |
-| Two markers with dates <24px apart on timeline | Overlap | Second marker offset 8px downward |
+| Two markers with dates within 40px of each other on timeline | Overlap | Second marker offset ±16px; direction chosen by which side has fewer placed markers; label drawn above or below accordingly |
+| UTF-8 BOM at start of file | Corrupts first column header | Strip `﻿` before parsing |
+| CSV uses semicolons or tabs instead of commas | All columns report as missing | Auto-detect delimiter from header row character counts |
+| 5th dimension assigned default Tangerine color | Visually clashes with milestone markers | No automatic fix — user should assign a custom color via CSV `Color` column or UI swatch picker |
+| 6th+ dimensions all default to Blue-Gray | Multiple dimensions look identical | Same workaround as above |
 
 ---
 
@@ -117,27 +126,40 @@ The one consideration: if the `.html` file is shared internally with colleagues,
 
 Build in this sequence. Each step produces something testable before the next begins.
 
+**V1**
 1. **CSV parser** — define the column format, parse rows into typed objects, surface validation errors with row-level messages
 2. **Chart renderer** — draw dimension headers, activity bars, and the timeline axis on an HTML Canvas
-3. **Floating markers** — place milestone circles and decision text boxes at dimension level, pinned to date position
+3. **Floating markers** — place milestone circles and decision markers at dimension level, pinned to date position
 4. **Timeline scale toggle** — redraw the chart when the user switches between month, quarter, and year
 5. **PNG export** — render offscreen canvas at 2× resolution and trigger a file download
 6. **Swimlane visibility toggle** — hide/show individual dimensions and re-render
 7. **Color configuration** — apply BIOTRONIK palette as default; read per-dimension color overrides from CSV
 8. **Error and warning display** — show validation messages above the chart; show scale compression warning when applicable
 
+**V2**
+9. **Marker visual disambiguation** — milestone as Tangerine circle, decision as Yellow diamond; unified label positioning
+10. **Canvas legend** — draw legend inside topMargin using Canvas 2D API; visibility-aware; background box
+11. **Dimension header colors** — fill left column with dim.color instead of fixed BIOTRONIK Blue
+12. **Adaptive activity label placement** — use measureText() to place label inside or outside bar
+13. **Content visibility toggles** — Activities / Milestones / Decisions checkboxes; canvas updates instantly
+14. **Smart marker collision** — 40px threshold, ±16px offset, smart directional logic, label above/below
+15. **CSV compatibility** — strip BOM, auto-detect delimiter (comma/semicolon/tab)
+16. **In-app color swatch picker** — 7 BIOTRONIK color families × 4 HSL shades per dimension; click to reassign
+
 ---
 
-## definition of done (V1)
+## definition of done (V2)
 
-All of the following must pass before V1 is complete:
-
-- [x] `index.html` opens in Chrome on a locked-down work machine with no installation step
-- [x] CSV upload works via button click and via dragging the file onto the page
-- [x] Chart renders correctly: dimension headers, activity bars, milestone markers, decision markers, timeline axis
+- [x] `index.html` opens in Chrome with no installation step
+- [x] CSV upload works via button click and via file drop
+- [x] Chart renders correctly: dimension headers in palette color, activity bars, milestone circles, decision diamonds, timeline axis
+- [x] Canvas legend appears in browser view and in exported PNG
 - [x] Month / Quarter / Year toggle redraws the chart without page reload
 - [x] Swimlane visibility toggle hides and shows individual dimensions correctly
-- [x] PNG export produces a 3840×2160px file (`gantt-export.png`) that is sharp when pasted into PowerPoint and viewed full-screen
-- [x] Invalid CSV rows produce a readable, row-specific error message — the app does not crash
-- [x] No network requests are made at any point (verify in Chrome DevTools → Network tab)
-- [ ] A real project chart is completed from scratch, including data entry, in under 10 minutes *(to be validated on target machine)*
+- [x] Activities / Milestones / Decisions toggles filter content and update legend
+- [x] Color swatch picker reassigns dimension color instantly without CSV change
+- [x] PNG export produces a 3840×2160px file (`gantt-export.png`) sharp in PowerPoint
+- [x] Invalid CSV rows produce readable, row-specific error messages
+- [x] App handles semicolon and tab-delimited CSV files and UTF-8 BOM without error
+- [x] No network requests are made at any point
+- [ ] A real project chart is completed from scratch in under 10 minutes *(validate on target machine)*

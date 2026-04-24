@@ -29,20 +29,21 @@ All colors come from the BIOTRONIK brand palette. Do not introduce colors outsid
 
 | name | hex | use |
 |---|---|---|
-| BIOTRONIK Blue | `#00234C` | dimension header background, primary text |
-| White | `#FFFFFF` | chart background, text on dark backgrounds |
-| Tangerine | `#F04E23` | decision markers, export button, warning border, today line |
+| BIOTRONIK Blue | `#00234C` | primary text, dimension header text, legend text |
+| White | `#FFFFFF` | chart background, text on colored backgrounds |
+| Tangerine | `#F04E23` | milestone markers, export button, warning border, today line |
 | Tangerine Dark | `#BE3C1C` | export button hover state |
-| Blue-Gray | `#587992` | timeline axis, separator lines, secondary labels |
+| Yellow | `#FFC700` | decision markers |
+| Blue-Gray | `#587992` | timeline axis, separator lines, secondary labels, legend border |
 | Gray | `#8E9295` | upload area border, disabled states, muted labels |
 | Green | `#00AC6C` | upload area border on successful file drop |
 | Alert Red | `#EE0000` | validation error display border and text |
 
 ### dimension color defaults (in order of appearance)
 
-When no per-dimension color override is provided in the CSV, assign colors in this sequence:
+When no per-dimension color override is provided in the CSV or set via the UI, assign colors in this sequence:
 
-| dimension slot | activity bar color | hex |
+| dimension slot | color name | hex |
 |---|---|---|
 | 1st dimension | Sky | `#2183CA` |
 | 2nd dimension | Green | `#00AC6C` |
@@ -51,17 +52,16 @@ When no per-dimension color override is provided in the CSV, assign colors in th
 | 5th dimension | Tangerine | `#F04E23` |
 | 6th dimension+ | Blue-Gray | `#587992` |
 
-Activity bar fill uses the dimension color at ~80% opacity (hex suffix `CC`). Activity bar border (stroke) uses the dimension color at 100% opacity.
+Activity bar fill uses the dimension color at ~80% opacity (hex suffix `CC`). Activity bar stroke uses the dimension color at 100% opacity, 1px.
+
+> **Known conflict:** The 5th slot uses Tangerine, which is the same color as milestone markers. If a fifth or later dimension is added, assign a custom color via the CSV `Color` column or via the in-app swatch picker.
 
 ### marker colors
 
-| marker type | fill | text |
-|---|---|---|
-| milestone circle | White | BIOTRONIK Blue `#00234C` |
-| milestone circle border | BIOTRONIK Blue `#00234C` | — |
-| decision box fill | Tangerine `#F04E23` at 15% opacity | — |
-| decision box border | Tangerine `#F04E23` | — |
-| decision box text | BIOTRONIK Blue `#00234C` | — |
+| marker type | shape | fill | stroke | label color |
+|---|---|---|---|---|
+| Milestone | Circle, 7px radius | Tangerine `#F04E23` | None | BIOTRONIK Blue `#00234C` |
+| Decision | Diamond (rotated square, 7px) | Yellow `#FFC700` | None | BIOTRONIK Blue `#00234C` |
 
 ---
 
@@ -72,15 +72,16 @@ The tool targets PowerPoint output. Use Verdana as the primary font — it is un
 | element | font | weight | size (at 1920px canvas width) |
 |---|---|---|---|
 | Dimension header label | Verdana | Bold | 13px |
-| Activity label | Verdana | Regular | 11px |
-| Timeline axis label (month/quarter/year) | Verdana | Regular | 10px |
-| Milestone label | Verdana | Regular | 10px |
-| Decision box text | Verdana | Regular | 10px |
+| Activity label | Verdana | Regular | 12px |
+| Timeline axis label (month/quarter/year) | Verdana | Regular | 12px |
+| Milestone label | Verdana | Regular | 12px |
+| Decision label | Verdana | Regular | 12px |
+| Legend label | Verdana | Regular | 12px |
 | Chart title (if shown) | Verdana | Bold | 15px |
 | UI controls (outside canvas) | system-ui, sans-serif | Regular | 14px |
 
 All text on white background: BIOTRONIK Blue `#00234C`.
-All text on BIOTRONIK Blue background: White `#FFFFFF`.
+All text on dimension-colored background: White `#FFFFFF`.
 
 ---
 
@@ -90,6 +91,8 @@ All text on BIOTRONIK Blue background: White `#FFFFFF`.
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
+│  [legend — top margin area, left-aligned]                       │
+├─────────────────────────────────────────────────────────────────┤
 │  [timeline axis header — months or quarters or years]           │
 ├──────────────────┬──────────────────────────────────────────────┤
 │  Dimension A     │  [activity bars and floating markers]        │
@@ -123,12 +126,29 @@ All text on BIOTRONIK Blue background: White `#FFFFFF`.
 | Separator line between activities within a dimension | 0.5px, Gray `#8E9295` at 30% opacity |
 | Minimum canvas height | 1080px |
 
+### legend
+
+Drawn inside the canvas using the Canvas 2D API, within `topMargin` (40px). Not an HTML element — appears in both the browser view and the exported PNG.
+
+- Position: top-left corner, 12px from left edge, vertically centered within topMargin (y = 20px)
+- Layout: three items in a horizontal row — activity bar sample, milestone sample, decision sample
+- Background: white fill with 1px Blue-Gray border, 3px corner radius, 8px horizontal padding, 6px vertical padding
+- Font: Verdana Regular 12px, BIOTRONIK Blue `#00234C`, textBaseline middle
+- Spacing between items: 24px
+
+| item | sample shape | label |
+|---|---|---|
+| Activity bar | Rounded rectangle 28×12px, dimension color at 80% fill + 100% stroke | "Activity bar" |
+| Milestone | Filled Tangerine circle, 7px radius | "Milestone" |
+| Decision | Filled Yellow diamond, 7px | "Decision point" |
+
+The legend dynamically hides items when the corresponding content type is toggled off. Remaining items reflow to close the gap.
+
 ### dimension header
 
-- Background: BIOTRONIK Blue `#00234C`
+- Background: the dimension's assigned palette color (same color as its activity bars)
 - Text: White `#FFFFFF`, Verdana Bold 13px, vertically centered, 12px left padding
-- Spans full height of the dimension (header row + all activity rows + marker row)
-- The dimension header column is on the left; the timeline area is to the right
+- Spans full height of the dimension section (header row + all activity rows + marker row)
 
 ### activity bars
 
@@ -136,8 +156,10 @@ All text on BIOTRONIK Blue background: White `#FFFFFF`.
 - Corner radius: 3px
 - Fill: dimension color at ~80% opacity (hex suffix `CC`)
 - Stroke: dimension color at 100% opacity, 1px
-- Label: Verdana Regular 11px, BIOTRONIK Blue `#00234C`, positioned inside the bar if bar width >60px; otherwise positioned to the right of the bar
-- Minimum bar width: 4px (for very short activities — label goes to the right)
+- Label: Verdana Regular 12px, BIOTRONIK Blue `#00234C`
+  - Placed inside the bar if `textWidth + 12px ≤ barWidth`; otherwise placed to the right of the bar
+  - Text width is measured at runtime using `ctx.measureText()`
+- Minimum bar width: 4px (label always goes to the right for very short activities)
 
 ### timeline axis
 
@@ -159,26 +181,29 @@ All text on BIOTRONIK Blue background: White `#FFFFFF`.
 
 ### milestone (circle)
 
-- Shape: circle, 14px diameter (7px radius)
-- Fill: White `#FFFFFF`
-- Stroke: BIOTRONIK Blue `#00234C`, 1.5px
+- Shape: filled circle, 7px radius
+- Fill: Tangerine `#F04E23`
+- Stroke: none
 - Position: centered on the milestone date, vertically centered within the marker row
-- Label: Verdana Regular 10px, BIOTRONIK Blue `#00234C`, positioned below the circle, center-aligned, max 2 lines before truncating with ellipsis
+- Label: Verdana Regular 12px, BIOTRONIK Blue `#00234C`, center-aligned, positioned below the circle (3px gap), max 2 lines before truncating with ellipsis
 
-### decision (text box)
+### decision (diamond)
 
-- Shape: rounded rectangle, corner radius 4px
-- Fill: Tangerine `#F04E23` at 15% opacity
-- Stroke: Tangerine `#F04E23`, 1px
-- Position: left edge aligned to the decision date on the timeline, top-aligned to marker row
-- Width: auto — expands to fit text content, maximum 220px, wraps to next line if longer
-- Minimum height: 36px
-- Text: Verdana Regular 10px, BIOTRONIK Blue `#00234C`, 6px padding all sides, line height 12px
-- Multi-line text: line breaks inserted at `\n` in the CSV Notes field (stored as `\\n` in raw CSV)
+- Shape: filled diamond (square rotated 45°), 7px point-to-center
+- Fill: Yellow `#FFC700`
+- Stroke: none
+- Position: centered on the decision date, vertically centered within the marker row
+- Label: Verdana Regular 12px, BIOTRONIK Blue `#00234C`, center-aligned, positioned below the diamond (3px gap), max 2 lines before truncating with ellipsis
 
 ### marker row positioning
 
-Each dimension has one marker row, sitting below its last activity row and above the dimension separator line. Milestone and decision markers for the same dimension share this row. If two markers have dates within 24px of each other on the timeline, the second marker is offset 8px downward.
+Each dimension has one marker row, sitting below its last activity row and above the dimension separator line. Milestone and decision markers for the same dimension share this row.
+
+**Collision handling:** if two markers have dates within 40px of each other on the timeline:
+- The second marker is offset vertically by ±16px
+- Direction is chosen based on which side (above/below center) has fewer placed markers
+- When offset is negative (upward), the label is drawn above the marker shape
+- When offset is zero or positive (downward), the label is drawn below the marker shape
 
 ---
 
@@ -188,70 +213,64 @@ These are HTML elements above the canvas. They are not part of the exported PNG.
 
 ### validation error display
 
-Shown above all other controls if the CSV fails validation. Hidden when no errors exist.
-
 - Background: Alert Red `#EE0000` at 10% opacity
 - Border: 1px solid Alert Red `#EE0000`
-- Border radius: 4px
-- Padding: 12px
+- Border radius: 4px, Padding: 12px
 - Font: system-ui Regular 13px, Alert Red `#EE0000`
 - White-space: pre-wrap (each error on its own line)
-- Example: `Row 4: invalid date format — expected YYYY-MM-DD`
 
 ### scale compression warning display
 
-Shown below the error display (or at the top if no errors) when the timeline spans >3 years and Month scale is active. Hidden otherwise.
+Shown when the timeline spans >3 years and Month scale is active.
 
 - Background: Tangerine `#F04E23` at 12% opacity
 - Border: 1px solid Tangerine `#F04E23`
-- Border radius: 4px
-- Padding: 12px
+- Border radius: 4px, Padding: 12px
 - Font: system-ui Regular 13px, BIOTRONIK Blue `#00234C`
-- Message: `Timeline spans over 3 years. Month scale may be compressed — consider Quarter or Year.`
 
 ### upload area
 
-- Dashed border, 2px, Gray `#8E9295`
-- Corner radius: 8px
-- Background: White
-- Height: 80px
+- Dashed border, 2px, Gray `#8E9295`, corner radius 8px, height 80px
 - Text: "Upload CSV or drop file here" — system-ui Regular 14px, Gray `#8E9295`, centered
-- On hover: border color changes to BIOTRONIK Blue `#00234C` (class `hover`)
-- On successful file load: border color and text color change to Green `#00AC6C`, text changes to filename (class `drop-ok`, reverts after 1 second)
+- On hover: border color → BIOTRONIK Blue `#00234C`
+- On successful load: border and text → Green `#00AC6C`, text → filename (reverts after 1s)
 
 ### controls row
 
-A flex row between the upload area and visibility toggles:
-
 ```
-[scale toggle — left] [   spacer   ] [export button — right]
+[scale toggle — left] [   spacer   ] [export button — right]
 ```
 
 ### timeline scale toggle
 
 Three buttons: Month | Quarter | Year
 
-- Default state: White background, BIOTRONIK Blue border `#00234C` 1px, BIOTRONIK Blue text, system-ui 14px
-- Active state: BIOTRONIK Blue `#00234C` background, White text
-- Button height: 32px, padding: 0 16px
-- Grouped with shared borders (left button: rounds top-left and bottom-left only; right button: rounds top-right and bottom-right only; middle: no border radius). Adjacent buttons share a single 1px border (no double border).
+- Default: White background, BIOTRONIK Blue border 1px, BIOTRONIK Blue text, system-ui 14px
+- Active: BIOTRONIK Blue background, White text
+- Height: 32px, padding: 0 16px
+- Grouped with shared borders, no double borders
 
 ### visibility toggles
 
-One toggle per dimension, rendered after CSV is loaded. Shown in a wrapping flex row, 24px gap between items.
+Rendered after CSV is loaded. Shown in a wrapping flex row.
 
-- Custom checkbox: 16×16px square, BIOTRONIK Blue `#00234C` border 1.5px, corner radius 3px
-- Checked state: BIOTRONIK Blue fill, white ✓ checkmark (11px, centered)
-- Label: system-ui Regular 13px, BIOTRONIK Blue `#00234C`
-- All dimensions start visible (checked)
+**Dimensions section** — one toggle per dimension, labelled "Dimensions:":
+- Each dimension item shows a checkbox + name, with a 7×4 color swatch grid below it
+- Swatch grid: 7 color families (Sky, Green, Aqua, Berry, Tangerine, Yellow, Blue-Gray) × 4 shades (lightest → light → base → dark), generated via HSL offsets
+- Clicking a swatch instantly reassigns that dimension's color and re-renders
+- Active swatch highlighted with a BIOTRONIK Blue border
+
+**Content section** — three checkboxes labelled "Show:", separated from dimensions by a vertical divider:
+- Show: Activities
+- Show: Milestones
+- Show: Decisions
+- All enabled by default
+- Toggling off hides that content type from the canvas and removes it from the legend
 
 ### export button
 
-- Label: "Export PNG"
-- Background: Tangerine `#F04E23`
-- Text: White `#FFFFFF`, system-ui Bold 13px
-- Height: 36px, padding: 0 24px
-- Border radius: 4px
+- Label: "Export PNG", Background: Tangerine `#F04E23`, Text: White Bold system-ui 13px
+- Height: 36px, padding: 0 24px, border radius: 4px
 - On hover: Tangerine Dark `#BE3C1C`
 
 ---
@@ -261,7 +280,6 @@ One toggle per dimension, rendered after CSV is loaded. Shown in a wrapping flex
 ```
 [error display — full width, hidden if no errors]
 [warning display — full width, hidden if no warning]
-[16px gap]
 [upload area — full width]
 [16px gap]
 [controls row: scale toggle left | spacer | export button right]
@@ -278,6 +296,6 @@ One toggle per dimension, rendered after CSV is loaded. Shown in a wrapping flex
 - Any color not in the BIOTRONIK palette above
 - Font choices other than Verdana (for canvas text) and system-ui (for UI controls)
 - Layout dimensions other than those specified
-- Any animation or transition effect
+- Any animation or transition effect (hover scale on swatches excepted)
 - Any external font loading (no Google Fonts, no CDN fonts)
 - Any chart type other than the horizontal swimlane Gantt described here
