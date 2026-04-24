@@ -298,7 +298,7 @@
         return rows.filter((r) => r.trim().length > 0);
       }
 
-      function splitCsvFields(row) {
+      function splitCsvFields(row, delimiter) {
         const out = [];
         let cur = '';
         let inQuotes = false;
@@ -311,7 +311,7 @@
             } else {
               inQuotes = !inQuotes;
             }
-          } else if (ch === ',' && !inQuotes) {
+          } else if (ch === delimiter && !inQuotes) {
             out.push(cur.trim());
             cur = '';
           } else {
@@ -337,10 +337,18 @@
 
       function parseCsv(text) {
         const errors = [];
-        const rows = splitCsvRows(text);
+        // Strip UTF-8 BOM if present
+        const clean = text.charCodeAt(0) === 0xFEFF ? text.slice(1) : text;
+        const rows = splitCsvRows(clean);
         if (rows.length === 0) return { errors: ['No data found — check that your CSV has at least one activity row'] };
 
-        const header = splitCsvFields(rows[0]);
+        // Auto-detect delimiter: count commas, semicolons, tabs in header row
+        const firstRow = rows[0];
+        const counts = { ',': 0, ';': 0, '\t': 0 };
+        for (const ch of firstRow) if (ch in counts) counts[ch]++;
+        const delimiter = counts[';'] > counts[','] ? ';' : counts['\t'] > counts[','] ? '\t' : ',';
+
+        const header = splitCsvFields(rows[0], delimiter);
         const hIdx = (name) => header.findIndex((h) => h.trim().toLowerCase() === name.toLowerCase());
 
         const requiredCols = ['Row Type', 'Dimension', 'Activity', 'Label', 'Start Date', 'End Date', 'Type', 'Notes'];
@@ -372,7 +380,7 @@
 
         for (let r = 1; r < rows.length; r++) {
           const csvRowNum = r + 1;
-          const fields = splitCsvFields(rows[r]);
+          const fields = splitCsvFields(rows[r], delimiter);
           const val = (i) => (i >= 0 ? (fields[i] || '').trim() : '');
 
           const rowType = val(idx.rowType).toLowerCase();
