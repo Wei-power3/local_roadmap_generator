@@ -604,6 +604,51 @@
         renderCtx.fillStyle = COLORS.white;
         renderCtx.fillRect(0, 0, width, height);
 
+        // Legend — drawn inside topMargin area, vertically centred
+        {
+          const ly = LAYOUT.topMargin / 2;
+          const sampleRectW = 28;
+          const sampleRectH = 12;
+          const circleR = 7;
+          const labelGap = 4;
+          const itemGap = 24;
+          const sampleColor = DEFAULT_DIMENSION_COLORS[0];
+
+          renderCtx.font = FONT.axis;
+          renderCtx.textBaseline = 'middle';
+          renderCtx.textAlign = 'left';
+
+          let lx = 12;
+
+          roundedRect(renderCtx, lx, ly - sampleRectH / 2, sampleRectW, sampleRectH, 3);
+          renderCtx.fillStyle = sampleColor + 'CC';
+          renderCtx.fill();
+          renderCtx.strokeStyle = sampleColor;
+          renderCtx.lineWidth = 1;
+          renderCtx.stroke();
+          lx += sampleRectW + labelGap;
+          renderCtx.fillStyle = COLORS.blue;
+          renderCtx.fillText('Activity bar', lx, ly);
+          lx += renderCtx.measureText('Activity bar').width + itemGap;
+
+          renderCtx.beginPath();
+          renderCtx.arc(lx + circleR, ly, circleR, 0, Math.PI * 2);
+          renderCtx.fillStyle = COLORS.tangerine;
+          renderCtx.fill();
+          lx += circleR * 2 + labelGap;
+          renderCtx.fillStyle = COLORS.blue;
+          renderCtx.fillText('Milestone', lx, ly);
+          lx += renderCtx.measureText('Milestone').width + itemGap;
+
+          renderCtx.beginPath();
+          renderCtx.arc(lx + circleR, ly, circleR, 0, Math.PI * 2);
+          renderCtx.fillStyle = COLORS.tangerine;
+          renderCtx.fill();
+          lx += circleR * 2 + labelGap;
+          renderCtx.fillStyle = COLORS.blue;
+          renderCtx.fillText('Decision point', lx, ly);
+        }
+
         renderCtx.fillStyle = COLORS.white;
         renderCtx.fillRect(0, timelineStartY, width, LAYOUT.timelineHeaderHeight);
         renderCtx.strokeStyle = COLORS.blue;
@@ -702,15 +747,12 @@
             if (placedXs.some((px) => Math.abs(px - x) < 24)) yOffset = 8;
             placedXs.push(x);
 
-            if (m.type === 'milestone') {
+            {
               const cy = markerRowY + LAYOUT.markerRowHeight / 2 + yOffset;
               renderCtx.beginPath();
               renderCtx.arc(x, cy, 7, 0, Math.PI * 2);
-              renderCtx.fillStyle = COLORS.white;
+              renderCtx.fillStyle = COLORS.tangerine;
               renderCtx.fill();
-              renderCtx.strokeStyle = COLORS.blue;
-              renderCtx.lineWidth = 1.5;
-              renderCtx.stroke();
 
               renderCtx.font = FONT.milestone;
               renderCtx.fillStyle = COLORS.blue;
@@ -719,46 +761,6 @@
               const lines = String(m.label || '').split('\n');
               drawMultiline(renderCtx, lines, x, cy + 10, 12, 2, 140);
               renderCtx.textAlign = 'left';
-            } else if (m.type === 'decision') {
-              const pad = 6;
-              renderCtx.font = FONT.decision;
-              const rawLines = (m.notes || m.label || 'Decision').split('\n');
-              const maxW = 220 - pad * 2;
-              const lineHeight = 12;
-
-              let measuredLines = [];
-              rawLines.forEach((line) => {
-                const words = String(line).split(/\s+/).filter(Boolean);
-                let curr = '';
-                words.forEach((word) => {
-                  const t = curr ? curr + ' ' + word : word;
-                  if (renderCtx.measureText(t).width <= maxW) curr = t;
-                  else {
-                    if (curr) measuredLines.push(curr);
-                    curr = word;
-                  }
-                });
-                if (curr) measuredLines.push(curr);
-                if (words.length === 0) measuredLines.push('');
-              });
-              if (measuredLines.length === 0) measuredLines = ['Decision'];
-
-              const contentW = Math.max(...measuredLines.map((l) => renderCtx.measureText(l).width), 40);
-              const boxW = Math.min(220, contentW + pad * 2);
-              const boxH = Math.max(36, measuredLines.length * lineHeight + pad * 2);
-              const boxY = markerRowY + yOffset;
-
-              roundedRect(renderCtx, x, boxY, boxW, boxH, 4);
-              renderCtx.fillStyle = 'rgba(240,78,35,0.15)';
-              renderCtx.fill();
-              renderCtx.strokeStyle = COLORS.tangerine;
-              renderCtx.lineWidth = 1;
-              renderCtx.stroke();
-
-              renderCtx.fillStyle = COLORS.blue;
-              renderCtx.textBaseline = 'top';
-              renderCtx.textAlign = 'left';
-              drawMultiline(renderCtx, measuredLines, x + pad, boxY + pad, lineHeight, 6, maxW);
             }
           });
 
