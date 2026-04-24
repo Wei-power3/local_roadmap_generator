@@ -754,7 +754,7 @@
           const dimMarkers = state.project.markers.filter((m) => m.dimensionId === dim.id);
           const sectionHeight = LAYOUT.dimHeaderRowHeight + dimActivities.length * LAYOUT.activityRowHeight + LAYOUT.markerRowHeight;
 
-          renderCtx.fillStyle = COLORS.blue;
+          renderCtx.fillStyle = dim.color;
           renderCtx.fillRect(0, y, LAYOUT.leftColWidth, sectionHeight);
           renderCtx.fillStyle = COLORS.white;
           renderCtx.font = FONT.dimHeader;
@@ -841,7 +841,12 @@
             renderCtx.textAlign = 'center';
             renderCtx.textBaseline = 'top';
             const lines = String(m.label || '').split('\n');
-            drawMultiline(renderCtx, lines, x, cy + markerR + 3, 12, 2, 140);
+            if (yOffset < 0) {
+              // Label above marker: reserve 2 lines (24px) above shape
+              drawMultiline(renderCtx, lines, x, cy - markerR - 3 - 24, 12, 2, 140);
+            } else {
+              drawMultiline(renderCtx, lines, x, cy + markerR + 3, 12, 2, 140);
+            }
             renderCtx.textAlign = 'left';
           });
 
