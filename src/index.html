@@ -156,6 +156,24 @@
       transform: translateY(-0.5px);
     }
 
+    .toggle-section-label {
+      font-size: 11px;
+      font-weight: 700;
+      color: var(--blue-gray);
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      margin-right: 4px;
+      align-self: center;
+    }
+
+    .toggle-divider {
+      width: 1px;
+      height: 20px;
+      background: rgba(88,121,146,0.3);
+      margin: 0 8px;
+      align-self: center;
+    }
+
     #canvasWrap { width: 100%; }
 
     #chartCanvas {
@@ -202,6 +220,7 @@
         blue: '#00234C',
         white: '#FFFFFF',
         tangerine: '#F04E23',
+        yellow: '#FFC700',
         blueGray: '#587992',
         gray: '#8E9295',
         alertRed: '#EE0000'
@@ -223,10 +242,10 @@
 
       const FONT = {
         dimHeader: 'bold 13px Verdana',
-        activity: '11px Verdana',
-        axis: '10px Verdana',
-        milestone: '10px Verdana',
-        decision: '10px Verdana',
+        activity: '12px Verdana',
+        axis: '12px Verdana',
+        milestone: '12px Verdana',
+        decision: '12px Verdana',
         title: 'bold 15px Verdana'
       };
 
@@ -234,6 +253,9 @@
         project: null,
         scale: 'month',
         visibleDimensions: new Set(),
+        showActivities: true,
+        showMilestones: true,
+        showDecisions: true,
         errors: [],
         warning: ''
       };
@@ -276,7 +298,7 @@
         return rows.filter((r) => r.trim().length > 0);
       }
 
-      function splitCsvFields(row) {
+      function splitCsvFields(row, delimiter) {
         const out = [];
         let cur = '';
         let inQuotes = false;
@@ -289,7 +311,7 @@
             } else {
               inQuotes = !inQuotes;
             }
-          } else if (ch === ',' && !inQuotes) {
+          } else if (ch === delimiter && !inQuotes) {
             out.push(cur.trim());
             cur = '';
           } else {
@@ -315,10 +337,18 @@
 
       function parseCsv(text) {
         const errors = [];
-        const rows = splitCsvRows(text);
+        // Strip UTF-8 BOM if present
+        const clean = text.charCodeAt(0) === 0xFEFF ? text.slice(1) : text;
+        const rows = splitCsvRows(clean);
         if (rows.length === 0) return { errors: ['No data found — check that your CSV has at least one activity row'] };
 
-        const header = splitCsvFields(rows[0]);
+        // Auto-detect delimiter: count commas, semicolons, tabs in header row
+        const firstRow = rows[0];
+        const counts = { ',': 0, ';': 0, '\t': 0 };
+        for (const ch of firstRow) if (ch in counts) counts[ch]++;
+        const delimiter = counts[';'] > counts[','] ? ';' : counts['\t'] > counts[','] ? '\t' : ',';
+
+        const header = splitCsvFields(rows[0], delimiter);
         const hIdx = (name) => header.findIndex((h) => h.trim().toLowerCase() === name.toLowerCase());
 
         const requiredCols = ['Row Type', 'Dimension', 'Activity', 'Label', 'Start Date', 'End Date', 'Type', 'Notes'];
@@ -350,7 +380,7 @@
 
         for (let r = 1; r < rows.length; r++) {
           const csvRowNum = r + 1;
-          const fields = splitCsvFields(rows[r]);
+          const fields = splitCsvFields(rows[r], delimiter);
           const val = (i) => (i >= 0 ? (fields[i] || '').trim() : '');
 
           const rowType = val(idx.rowType).toLowerCase();
@@ -609,44 +639,81 @@
           const ly = LAYOUT.topMargin / 2;
           const sampleRectW = 28;
           const sampleRectH = 12;
-          const circleR = 7;
+          const markerR = 7;
           const labelGap = 4;
           const itemGap = 24;
+          const padH = 8;
+          const padV = 6;
           const sampleColor = DEFAULT_DIMENSION_COLORS[0];
 
           renderCtx.font = FONT.axis;
           renderCtx.textBaseline = 'middle';
           renderCtx.textAlign = 'left';
 
-          let lx = 12;
+          // Calculate total content width for background box
+          let totalW = 0;
+          if (state.showActivities) {
+            totalW += sampleRectW + labelGap + renderCtx.measureText('Activity bar').width;
+          }
+          if (state.showMilestones) {
+            if (totalW > 0) totalW += itemGap;
+            totalW += markerR * 2 + labelGap + renderCtx.measureText('Milestone').width;
+          }
+          if (state.showDecisions) {
+            if (totalW > 0) totalW += itemGap;
+            totalW += markerR * 2 + labelGap + renderCtx.measureText('Decision point').width;
+          }
 
-          roundedRect(renderCtx, lx, ly - sampleRectH / 2, sampleRectW, sampleRectH, 3);
-          renderCtx.fillStyle = sampleColor + 'CC';
-          renderCtx.fill();
-          renderCtx.strokeStyle = sampleColor;
-          renderCtx.lineWidth = 1;
-          renderCtx.stroke();
-          lx += sampleRectW + labelGap;
-          renderCtx.fillStyle = COLORS.blue;
-          renderCtx.fillText('Activity bar', lx, ly);
-          lx += renderCtx.measureText('Activity bar').width + itemGap;
+          if (totalW > 0) {
+            // Background box
+            roundedRect(renderCtx, 12 - padH, ly - sampleRectH / 2 - padV, totalW + padH * 2, sampleRectH + padV * 2, 3);
+            renderCtx.fillStyle = COLORS.white;
+            renderCtx.fill();
+            renderCtx.strokeStyle = 'rgba(88,121,146,0.4)';
+            renderCtx.lineWidth = 1;
+            renderCtx.stroke();
 
-          renderCtx.beginPath();
-          renderCtx.arc(lx + circleR, ly, circleR, 0, Math.PI * 2);
-          renderCtx.fillStyle = COLORS.tangerine;
-          renderCtx.fill();
-          lx += circleR * 2 + labelGap;
-          renderCtx.fillStyle = COLORS.blue;
-          renderCtx.fillText('Milestone', lx, ly);
-          lx += renderCtx.measureText('Milestone').width + itemGap;
+            let lx = 12;
 
-          renderCtx.beginPath();
-          renderCtx.arc(lx + circleR, ly, circleR, 0, Math.PI * 2);
-          renderCtx.fillStyle = COLORS.tangerine;
-          renderCtx.fill();
-          lx += circleR * 2 + labelGap;
-          renderCtx.fillStyle = COLORS.blue;
-          renderCtx.fillText('Decision point', lx, ly);
+            if (state.showActivities) {
+              roundedRect(renderCtx, lx, ly - sampleRectH / 2, sampleRectW, sampleRectH, 3);
+              renderCtx.fillStyle = sampleColor + 'CC';
+              renderCtx.fill();
+              renderCtx.strokeStyle = sampleColor;
+              renderCtx.lineWidth = 1;
+              renderCtx.stroke();
+              lx += sampleRectW + labelGap;
+              renderCtx.fillStyle = COLORS.blue;
+              renderCtx.fillText('Activity bar', lx, ly);
+              lx += renderCtx.measureText('Activity bar').width + itemGap;
+            }
+
+            if (state.showMilestones) {
+              renderCtx.beginPath();
+              renderCtx.arc(lx + markerR, ly, markerR, 0, Math.PI * 2);
+              renderCtx.fillStyle = COLORS.tangerine;
+              renderCtx.fill();
+              lx += markerR * 2 + labelGap;
+              renderCtx.fillStyle = COLORS.blue;
+              renderCtx.fillText('Milestone', lx, ly);
+              lx += renderCtx.measureText('Milestone').width + itemGap;
+            }
+
+            if (state.showDecisions) {
+              const dx = lx + markerR;
+              renderCtx.beginPath();
+              renderCtx.moveTo(dx, ly - markerR);
+              renderCtx.lineTo(dx + markerR, ly);
+              renderCtx.lineTo(dx, ly + markerR);
+              renderCtx.lineTo(dx - markerR, ly);
+              renderCtx.closePath();
+              renderCtx.fillStyle = COLORS.yellow;
+              renderCtx.fill();
+              lx += markerR * 2 + labelGap;
+              renderCtx.fillStyle = COLORS.blue;
+              renderCtx.fillText('Decision point', lx, ly);
+            }
+          }
         }
 
         renderCtx.fillStyle = COLORS.white;
@@ -695,7 +762,7 @@
           const dimMarkers = state.project.markers.filter((m) => m.dimensionId === dim.id);
           const sectionHeight = LAYOUT.dimHeaderRowHeight + dimActivities.length * LAYOUT.activityRowHeight + LAYOUT.markerRowHeight;
 
-          renderCtx.fillStyle = COLORS.blue;
+          renderCtx.fillStyle = dim.color;
           renderCtx.fillRect(0, y, LAYOUT.leftColWidth, sectionHeight);
           renderCtx.fillStyle = COLORS.white;
           renderCtx.font = FONT.dimHeader;
@@ -717,18 +784,21 @@
             const x1 = xForDate(a.endDate);
             const barW = Math.max(4, x1 - x0);
 
-            roundedRect(renderCtx, x0, barY, barW, 18, 3);
-            renderCtx.fillStyle = dim.color + 'CC';
-            renderCtx.fill();
-            renderCtx.strokeStyle = dim.color;
-            renderCtx.lineWidth = 1;
-            renderCtx.stroke();
+            if (state.showActivities) {
+              roundedRect(renderCtx, x0, barY, barW, 18, 3);
+              renderCtx.fillStyle = dim.color + 'CC';
+              renderCtx.fill();
+              renderCtx.strokeStyle = dim.color;
+              renderCtx.lineWidth = 1;
+              renderCtx.stroke();
 
-            renderCtx.font = FONT.activity;
-            renderCtx.fillStyle = COLORS.blue;
-            renderCtx.textBaseline = 'middle';
-            const labelX = barW > 60 ? x0 + 6 : x0 + barW + 6;
-            renderCtx.fillText(a.label, labelX, rowY + LAYOUT.activityRowHeight / 2);
+              renderCtx.font = FONT.activity;
+              renderCtx.fillStyle = COLORS.blue;
+              renderCtx.textBaseline = 'middle';
+              const labelW = renderCtx.measureText(a.label).width;
+              const labelX = (labelW + 12 <= barW) ? x0 + 6 : x0 + barW + 6;
+              renderCtx.fillText(a.label, labelX, rowY + LAYOUT.activityRowHeight / 2);
+            }
 
             renderCtx.strokeStyle = 'rgba(142,146,149,0.3)';
             renderCtx.lineWidth = 0.5;
@@ -739,29 +809,53 @@
           });
 
           const markerRowY = y + LAYOUT.dimHeaderRowHeight + dimActivities.length * LAYOUT.activityRowHeight;
-          const placedXs = [];
+          const placedMarkers = [];
 
           dimMarkers.forEach((m) => {
+            if (m.type === 'milestone' && !state.showMilestones) return;
+            if (m.type === 'decision' && !state.showDecisions) return;
+
             const x = xForDate(m.date);
             let yOffset = 0;
-            if (placedXs.some((px) => Math.abs(px - x) < 24)) yOffset = 8;
-            placedXs.push(x);
+            const nearby = placedMarkers.filter((p) => Math.abs(p.x - x) < 40);
+            if (nearby.length > 0) {
+              const upCount = nearby.filter((p) => p.yOffset < 0).length;
+              const downCount = nearby.filter((p) => p.yOffset >= 0).length;
+              yOffset = upCount <= downCount ? -16 : 16;
+            }
+            placedMarkers.push({ x, yOffset });
 
-            {
-              const cy = markerRowY + LAYOUT.markerRowHeight / 2 + yOffset;
+            const cy = markerRowY + LAYOUT.markerRowHeight / 2 + yOffset;
+            const markerR = 7;
+
+            if (m.type === 'milestone') {
               renderCtx.beginPath();
-              renderCtx.arc(x, cy, 7, 0, Math.PI * 2);
+              renderCtx.arc(x, cy, markerR, 0, Math.PI * 2);
               renderCtx.fillStyle = COLORS.tangerine;
               renderCtx.fill();
-
-              renderCtx.font = FONT.milestone;
-              renderCtx.fillStyle = COLORS.blue;
-              renderCtx.textAlign = 'center';
-              renderCtx.textBaseline = 'top';
-              const lines = String(m.label || '').split('\n');
-              drawMultiline(renderCtx, lines, x, cy + 10, 12, 2, 140);
-              renderCtx.textAlign = 'left';
+            } else {
+              renderCtx.beginPath();
+              renderCtx.moveTo(x, cy - markerR);
+              renderCtx.lineTo(x + markerR, cy);
+              renderCtx.lineTo(x, cy + markerR);
+              renderCtx.lineTo(x - markerR, cy);
+              renderCtx.closePath();
+              renderCtx.fillStyle = COLORS.yellow;
+              renderCtx.fill();
             }
+
+            renderCtx.font = FONT.milestone;
+            renderCtx.fillStyle = COLORS.blue;
+            renderCtx.textAlign = 'center';
+            renderCtx.textBaseline = 'top';
+            const lines = String(m.label || '').split('\n');
+            if (yOffset < 0) {
+              // Label above marker: reserve 2 lines (24px) above shape
+              drawMultiline(renderCtx, lines, x, cy - markerR - 3 - 24, 12, 2, 140);
+            } else {
+              drawMultiline(renderCtx, lines, x, cy + markerR + 3, 12, 2, 140);
+            }
+            renderCtx.textAlign = 'left';
           });
 
           y += sectionHeight;
@@ -815,28 +909,60 @@
         });
       }
 
+      function makeToggleLabel(text, checked, onChange) {
+        const label = document.createElement('label');
+        label.className = 'toggle-item';
+        const input = document.createElement('input');
+        input.type = 'checkbox';
+        input.checked = checked;
+        input.addEventListener('change', () => onChange(input.checked));
+        const span = document.createElement('span');
+        span.textContent = text;
+        label.appendChild(input);
+        label.appendChild(span);
+        return label;
+      }
+
       function refreshVisibilityToggles() {
         el.visibilityToggles.innerHTML = '';
         if (!state.project) return;
+
+        const dimSection = document.createElement('span');
+        dimSection.className = 'toggle-section-label';
+        dimSection.textContent = 'Dimensions:';
+        el.visibilityToggles.appendChild(dimSection);
+
         state.project.dimensions.forEach((dim) => {
-          const label = document.createElement('label');
-          label.className = 'toggle-item';
+          el.visibilityToggles.appendChild(makeToggleLabel(
+            dim.name,
+            state.visibleDimensions.has(dim.id),
+            (checked) => {
+              if (checked) state.visibleDimensions.add(dim.id);
+              else state.visibleDimensions.delete(dim.id);
+              render();
+            }
+          ));
+        });
 
-          const input = document.createElement('input');
-          input.type = 'checkbox';
-          input.checked = state.visibleDimensions.has(dim.id);
-          input.addEventListener('change', () => {
-            if (input.checked) state.visibleDimensions.add(dim.id);
-            else state.visibleDimensions.delete(dim.id);
-            render();
-          });
+        const divider = document.createElement('div');
+        divider.className = 'toggle-divider';
+        el.visibilityToggles.appendChild(divider);
 
-          const span = document.createElement('span');
-          span.textContent = dim.name;
+        const showSection = document.createElement('span');
+        showSection.className = 'toggle-section-label';
+        showSection.textContent = 'Show:';
+        el.visibilityToggles.appendChild(showSection);
 
-          label.appendChild(input);
-          label.appendChild(span);
-          el.visibilityToggles.appendChild(label);
+        [
+          { key: 'showActivities', text: 'Activities' },
+          { key: 'showMilestones', text: 'Milestones' },
+          { key: 'showDecisions', text: 'Decisions' }
+        ].forEach(({ key, text }) => {
+          el.visibilityToggles.appendChild(makeToggleLabel(
+            text,
+            state[key],
+            (checked) => { state[key] = checked; render(); }
+          ));
         });
       }
 
